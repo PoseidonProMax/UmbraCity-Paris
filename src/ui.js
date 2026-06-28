@@ -12,7 +12,6 @@ export class UI {
 
   init() {
     this.createBrandPanel();
-    this.createSplash();
     this.createToolbar();
     this.createLegend();
     this.createTimeSlider();
@@ -47,44 +46,68 @@ export class UI {
     this.container.appendChild(brand);
   }
 
-  // Splash Screen Overlay (Automatic Welcome Experience)
+  // Splash Screen Overlay (Automatic Welcome Experience with Progress Loading)
   createSplash() {
     const splash = document.createElement('div');
     splash.className = 'splash-overlay';
     splash.innerHTML = `
-      <div class="splash-content glass-panel" style="padding: 30px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); max-width: 400px; text-align: center;">
-        <h1 class="splash-logo" style="font-size: 2.5rem; margin-bottom: 12px; font-weight: 800; background: linear-gradient(135deg, #fff 30%, var(--color-warm)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🌞 UmbraCity</h1>
-        <p class="splash-subtitle" style="font-size: 1rem; color: #cbd5e1; margin-bottom: 20px; line-height: 1.4;">
-          Pedestrian-first navigation for a hotter world.
+      <div class="splash-content glass-panel" style="padding: 35px 30px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.12); max-width: 420px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+        <h1 class="splash-logo" style="font-size: 2.7rem; margin-bottom: 8px; font-weight: 850; background: linear-gradient(135deg, #fff 40%, var(--color-warm)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.02em;">🌞 UmbraCity</h1>
+        <p class="splash-subtitle" style="font-size: 0.95rem; color: #94a3b8; margin-bottom: 25px; line-height: 1.45; font-weight: 550;">
+          Pedestrian shade navigation for a hotter world.
         </p>
-        <div class="sync-status" id="sync-status-lbl" style="font-size: 0.85rem; color: #38bdf8; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px;">
-          <span class="spinner" style="width: 14px; height: 14px; border: 2px solid rgba(56,189,248,0.3); border-top-color: #38bdf8; border-radius: 50%; display: inline-block; animation: spin 1s infinite linear;"></span>
-          <span>Syncing live conditions...</span>
+        
+        <div class="loading-status-text" id="load-status-lbl" style="font-size: 0.82rem; color: #38bdf8; font-weight: 600; text-align: left; margin-bottom: 6px; letter-spacing: 0.01em;">
+          📂 Loading geospatial datasets...
+        </div>
+        <div class="loading-bar-container" style="width: 100%; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; margin-bottom: 12px;">
+          <div class="loading-bar-progress" id="load-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #38bdf8 0%, #10b981 100%); transition: width 0.2s ease-out; box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);"></div>
+        </div>
+        <div class="sync-status" id="sync-status-lbl" style="font-size: 0.72rem; color: #64748b; font-weight: 500; text-align: right; min-height: 16px;">
+          Initialising...
         </div>
       </div>
     `;
     this.container.appendChild(splash);
     
-    // Smooth transition: show synced after 1.5 seconds, then display Enter button
+    const progress = splash.querySelector('#load-progress-bar');
+    const status = splash.querySelector('#load-status-lbl');
+    const sync = splash.querySelector('#sync-status-lbl');
+    
+    // Animate progress and status messages
     setTimeout(() => {
-      const lbl = splash.querySelector('#sync-status-lbl');
-      if (lbl) {
-        lbl.innerHTML = `🟢 Live conditions synced successfully`;
-        lbl.style.color = 'var(--comfort-green)';
-      }
+      progress.style.width = '35%';
+      status.innerHTML = `🏙 Assembling 3D structures & roads...`;
+      sync.innerHTML = `Loaded 2.2k building blocks`;
+    }, 400);
+
+    setTimeout(() => {
+      progress.style.width = '70%';
+      status.innerHTML = `☀️ Projecting solar shade maps...`;
+      sync.innerHTML = `Rasterised 2.1k tree shadows`;
+    }, 900);
+
+    setTimeout(() => {
+      progress.style.width = '100%';
+      status.innerHTML = `🟢 Live conditions synced successfully`;
+      status.style.color = '#10b981';
+      sync.innerHTML = `Active and ready`;
       
-      // Add glowing enter button to satisfy browser AudioContext interaction policy
+      // Add glowing Enter button to satisfy AudioContext user interaction policy
       const enterBtn = document.createElement('button');
       enterBtn.className = 'btn';
-      enterBtn.style.marginTop = '22px';
+      enterBtn.style.marginTop = '24px';
       enterBtn.style.width = '100%';
       enterBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
       enterBtn.style.color = '#fff';
       enterBtn.style.borderColor = 'rgba(255,255,255,0.15)';
       enterBtn.style.fontWeight = '700';
-      enterBtn.style.fontSize = '0.95rem';
+      enterBtn.style.fontSize = '0.98rem';
       enterBtn.style.padding = '12px';
-      enterBtn.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.3)';
+      enterBtn.style.borderRadius = '10px';
+      enterBtn.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
+      enterBtn.style.cursor = 'pointer';
+      enterBtn.style.animation = 'fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
       enterBtn.textContent = 'Enter UmbraCity';
       
       splash.querySelector('.splash-content').appendChild(enterBtn);
@@ -99,7 +122,7 @@ export class UI {
           splash.remove();
         }, 500);
       });
-    }, 1200);
+    }, 1400);
   }
 
   // Toolbar on Left side (shifted down to fit brand panel)
@@ -486,6 +509,9 @@ export class UI {
         <button class="route-setup-btn" id="btn-select-end" disabled>
           &nbsp;🏁 <span id="lbl-end-status">Select Destination</span>
         </button>
+        <button class="route-setup-btn" id="btn-clear-route" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); color: #f87171; display: none; font-weight: 600;">
+          ✕ Clear Active Route
+        </button>
       </div>
       
       <div style="font-size: 0.75rem; color: #94a3b8; line-height: 1.4; margin-top: 14px; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.04);">
@@ -501,6 +527,7 @@ export class UI {
 
     const btnStart = this.routePanel.querySelector('#btn-select-start');
     const btnEnd = this.routePanel.querySelector('#btn-select-end');
+    const btnClear = this.routePanel.querySelector('#btn-clear-route');
     
     btnStart.addEventListener('click', () => {
       btnStart.classList.add('active-selecting');
@@ -513,9 +540,16 @@ export class UI {
       btnStart.classList.remove('active-selecting');
       this.callbacks.onStartSelection('end');
     });
+
+    btnClear.addEventListener('click', () => {
+      this.callbacks.onClearRoute();
+    });
   }
 
   updateRouteSetup(type, lngLat) {
+    const btnClear = document.getElementById('btn-clear-route');
+    if (btnClear) btnClear.style.display = 'block';
+
     if (type === 'start') {
       const lbl = document.getElementById('lbl-start-status');
       const btnStart = document.getElementById('btn-select-start');

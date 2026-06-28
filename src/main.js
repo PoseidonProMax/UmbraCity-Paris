@@ -310,9 +310,10 @@ class App {
       this.setupUI();
       this.setupFamousLandmarks();
       
-      // Sync clock and weather
+      // Sync clock and weather (instant simulated fallback, live weather sync in background)
       this.setMode('live');
-      await this.syncLiveWeather(center[1], center[0]);
+      this.setSimulatedWeather();
+      this.syncLiveWeather(center[1], center[0]);
       
       // Auto weather refresh forecasting loop
       this.weatherRefreshInterval = setInterval(() => {
@@ -321,6 +322,27 @@ class App {
       
       // Initial scene rendering calculation
       this.updateScene();
+      
+      // Start cinematic intro immediately on startup
+      this.startCinematicIntro();
+      
+      // Play audio on first user click/keydown to satisfy browser autoplay security
+      const startAudio = () => {
+        if (!this.audioEngine.initialized) {
+          this.audioEngine.init();
+          this.audioEngine.toggleMute();
+          const speaker = document.getElementById('audio-toggle');
+          if (speaker) {
+            speaker.classList.add('playing');
+            const line = speaker.querySelector('.mute-line');
+            if (line) line.remove();
+          }
+        }
+        document.removeEventListener('click', startAudio);
+        document.removeEventListener('keydown', startAudio);
+      };
+      document.addEventListener('click', startAudio);
+      document.addEventListener('keydown', startAudio);
       
       // Setup Click listener
       this.map.on('click', (e) => this.handleMapClick(e));
@@ -498,13 +520,21 @@ class App {
         return await res.json();
       };
       
-      this.data.buildings = await fetchJson('/data/buildings.json');
-      this.data.trees = await fetchJson('/data/trees.json');
-      this.data.roads = await fetchJson('/data/roads.json');
-      this.data.parks = await fetchJson('/data/parks.json');
-      this.data.water = await fetchJson('/data/water.json');
+      const [buildings, trees, roads, parks, water] = await Promise.all([
+        fetchJson('/data/buildings.json'),
+        fetchJson('/data/trees.json'),
+        fetchJson('/data/roads.json'),
+        fetchJson('/data/parks.json'),
+        fetchJson('/data/water.json')
+      ]);
       
-      console.log("Geospatial data successfully cached.");
+      this.data.buildings = buildings;
+      this.data.trees = trees;
+      this.data.roads = roads;
+      this.data.parks = parks;
+      this.data.water = water;
+      
+      console.log("Geospatial data successfully cached in parallel.");
     } catch (e) {
       console.error("Failed to load preprocessed data", e);
     }
@@ -1003,7 +1033,7 @@ class App {
         {
           type: 'Feature',
           properties: {
-            color: '#f59e0b', // amber fastest
+            color: '#ec4899', // hot pink fastest
             width: 5,
             opacity: 0.65
           },
@@ -1012,7 +1042,7 @@ class App {
         {
           type: 'Feature',
           properties: {
-            color: '#0ea5e9', // sky blue coolest
+            color: '#00f0ff', // electric cyan coolest
             width: 5,
             opacity: 0.65
           },
@@ -1050,7 +1080,7 @@ class App {
     features.push({
       type: 'Feature',
       properties: {
-        color: '#f59e0b',
+        color: '#ec4899', // hot pink fastest
         width: this.activeRouteView === 'fastest' ? 8 : 4.5,
         opacity: this.activeRouteView === 'fastest' ? 0.95 : 0.35
       },
@@ -1060,7 +1090,7 @@ class App {
     features.push({
       type: 'Feature',
       properties: {
-        color: '#0ea5e9',
+        color: '#00f0ff', // electric cyan coolest
         width: this.activeRouteView === 'coolest' ? 8 : 4.5,
         opacity: this.activeRouteView === 'coolest' ? 0.95 : 0.35
       },

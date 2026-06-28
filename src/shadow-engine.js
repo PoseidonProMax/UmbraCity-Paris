@@ -19,11 +19,12 @@ export class ShadowEngine {
     this.gridCols = 15;
     this.gridRows = 15;
     
-    this.clearGrid();
-    
     // Cache for projected shadow geometries
     this.cachedShadows = []; // Array of shadow polygons corresponding to building indices
+    this.cachedTreeShadows = []; // Array of {center, radius} corresponding to tree indices
     this.currentSunPos = null;
+    
+    this.clearGrid();
   }
 
   setData(buildings, trees, parks) {
@@ -33,7 +34,8 @@ export class ShadowEngine {
   }
 
   clearGrid() {
-    this.grid = Array(this.gridCols * this.gridRows).fill(null).map(() => []);
+    this.buildingGrid = Array(this.gridCols * this.gridRows).fill(null).map(() => []);
+    this.treeGrid = Array(this.gridCols * this.gridRows).fill(null).map(() => []);
   }
 
   getBucketIndices(lng, lat) {
@@ -49,13 +51,29 @@ export class ShadowEngine {
     for (let c = col - radiusBuckets; c <= col + radiusBuckets; c++) {
       for (let r = row - radiusBuckets; r <= row + radiusBuckets; r++) {
         if (c >= 0 && c < this.gridCols && r >= 0 && r < this.gridRows) {
-          const bucket = this.grid[r * this.gridCols + c];
-          bucket.forEach(idx => indices.add(idx));
+          const bucket = this.buildingGrid[r * this.gridCols + c];
+          if (bucket) bucket.forEach(idx => indices.add(idx));
         }
       }
     }
     
     return Array.from(indices).map(idx => this.cachedShadows[idx]).filter(Boolean);
+  }
+
+  getTreeShadowsNear(lng, lat, radiusBuckets = 1) {
+    const { col, row } = this.getBucketIndices(lng, lat);
+    const indices = new Set();
+    
+    for (let c = col - radiusBuckets; c <= col + radiusBuckets; c++) {
+      for (let r = row - radiusBuckets; r <= row + radiusBuckets; r++) {
+        if (c >= 0 && c < this.gridCols && r >= 0 && r < this.gridRows) {
+          const bucket = this.treeGrid[r * this.gridCols + c];
+          if (bucket) bucket.forEach(idx => indices.add(idx));
+        }
+      }
+    }
+    
+    return Array.from(indices).map(idx => this.cachedTreeShadows[idx]).filter(Boolean);
   }
 
   getSunPosition(date) {
@@ -112,16 +130,17 @@ export class ShadowEngine {
   cacheAllShadows(sunPos) {
     this.currentSunPos = sunPos;
     this.cachedShadows = [];
+    this.cachedTreeShadows = [];
     this.clearGrid();
     
     if (sunPos.isNight) return;
     
+    // Index buildings
     this.buildings.forEach((building, idx) => {
       const shadowPoly = this.projectShadow(building, sunPos);
       this.cachedShadows.push(shadowPoly);
       
       if (shadowPoly) {
-        // Index the shadow polygon in our grid
         const bbox = turf.bbox(shadowPoly);
         const start = this.getBucketIndices(bbox[0], bbox[1]);
         const end = this.getBucketIndices(bbox[2], bbox[3]);
@@ -133,9 +152,35 @@ export class ShadowEngine {
         
         for (let c = startCol; c <= endCol; c++) {
           for (let r = startRow; r <= endRow; r++) {
-            this.grid[r * this.gridCols + c].push(idx);
+            this.buildingGrid[r * this.gridCols + c].push(idx);
           }
         }
+      }
+    });
+
+    // Index trees
+    this.trees.forEach((tree, idx) => {
+      const height = tree.properties._height || 8;
+      const radius = tree.properties._canopyRadius || 3;
+      const shadowLength = height / Math.tan(sunPos.altitude);
+      const finalLength = Math.min(shadowLength, 60);
+      
+      const projectedCenter = turf.destination(
+        tree,
+        finalLength,
+        sunPos.shadowDirectionDeg,
+        { units: 'meters' }
+      );
+      
+      this.cachedTreeShadows.push({
+        center: projectedCenter,
+        radius: radius
+      });
+      
+      const centerCoords = projectedCenter.geometry.coordinates;
+      const { col, row } = this.getBucketIndices(centerCoords[0], centerCoords[1]);
+      if (col >= 0 && col < this.gridCols && row >= 0 && row < this.gridRows) {
+        this.treeGrid[row * this.gridCols + col].push(idx);
       }
     });
   }
@@ -180,25 +225,12 @@ export class ShadowEngine {
       }
     }
 
-    // 2. Check nearby OSM trees
-    for (const tree of this.trees) {
-      const distance = turf.distance(pt, tree, { units: 'meters' });
-      if (distance < 80) {
-        const height = tree.properties._height || 8;
-        const radius = tree.properties._canopyRadius || 3;
-        const shadowLength = height / Math.tan(sunPos.altitude);
-        
-        const projectedCenter = turf.destination(
-          tree,
-          shadowLength,
-          sunPos.shadowDirectionDeg,
-          { units: 'meters' }
-        );
-        
-        const distToShadowCenter = turf.distance(pt, projectedCenter, { units: 'meters' });
-        if (distToShadowCenter <= radius) {
-          return true;
-        }
+    // 2. Check nearby OSM trees (highly optimized using spatial grid)
+    const nearbyTrees = this.getTreeShadowsNear(lng, lat, 1);
+    for (const treeShadow of nearbyTrees) {
+      const distToShadowCenter = turf.distance(pt, treeShadow.center, { units: 'meters' });
+      if (distToShadowCenter <= treeShadow.radius) {
+        return true;
       }
     }
 

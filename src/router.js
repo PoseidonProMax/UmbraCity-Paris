@@ -67,57 +67,61 @@ export class Router {
     return nearestNode;
   }
 
-  // Simple Dijkstra's Shortest Path Algorithm
+  // Optimized Dijkstra's Pathfinding Algorithm using dynamic active node tracking
   findPath(startKey, endKey, weightFn) {
     const distances = {};
     const previous = {};
-    const queue = new Set();
-    
-    // Initialise
-    Object.keys(this.graph).forEach(node => {
-      distances[node] = Infinity;
-      previous[node] = null;
-      queue.add(node);
-    });
     
     distances[startKey] = 0;
     
-    while (queue.size > 0) {
-      // Find node in queue with smallest distance
+    const active = new Set();
+    active.add(startKey);
+    const visited = new Set();
+    
+    while (active.size > 0) {
       let u = null;
       let minDistance = Infinity;
       
-      queue.forEach(node => {
-        if (distances[node] < minDistance) {
-          minDistance = distances[node];
+      active.forEach(node => {
+        const d = distances[node];
+        if (d < minDistance) {
+          minDistance = d;
           u = node;
         }
       });
       
-      // If we can't find a path or destination reached
       if (u === null || u === endKey) break;
       
-      queue.delete(u);
+      active.delete(u);
+      visited.add(u);
       
       const neighbors = this.graph[u] || [];
-      neighbors.forEach(edge => {
+      for (let i = 0; i < neighbors.length; i++) {
+        const edge = neighbors[i];
+        const neighbor = edge.node;
+        
+        if (visited.has(neighbor)) continue;
+        
         const alt = distances[u] + weightFn(edge);
-        if (alt < distances[edge.node]) {
-          distances[edge.node] = alt;
-          previous[edge.node] = u;
+        const currentDist = distances[neighbor] !== undefined ? distances[neighbor] : Infinity;
+        
+        if (alt < currentDist) {
+          distances[neighbor] = alt;
+          previous[neighbor] = u;
+          active.add(neighbor);
         }
-      });
+      }
     }
     
-    // Reconstruct path
+    if (distances[endKey] === undefined) return null;
+    
     const pathCoords = [];
     let curr = endKey;
-    while (curr !== null) {
+    while (curr !== null && curr !== undefined) {
       pathCoords.unshift(this.fromKey(curr));
       curr = previous[curr];
     }
     
-    // If the start and end are not connected, return empty
     if (pathCoords.length < 2 || this.toKey(pathCoords[0]) !== startKey) {
       return null;
     }
@@ -126,7 +130,7 @@ export class Router {
   }
 
   // Generate route stats and LineString geometry
-  getRouteDetails(pathCoords, shadowEngine, sunPos, userElements) {
+  getRouteDetails(pathCoords, shadowEngine, sunPos, userElements, roadShadeCache = null) {
     if (!pathCoords) return null;
     
     let totalDistance = 0;
@@ -138,10 +142,23 @@ export class Router {
       const dist = turf.distance(turf.point(p1), turf.point(p2), { units: 'meters' });
       totalDistance += dist;
       
-      // Sample midpoint shade
-      const midLng = (p1[0] + p2[0]) / 2;
-      const midLat = (p1[1] + p2[1]) / 2;
-      const isShaded = shadowEngine.isCoordinateShaded(midLng, midLat, sunPos, userElements);
+      // Sample midpoint shade (use lazy cache if available to avoid duplicate computations)
+      let isShaded = false;
+      const key1 = this.toKey(p1);
+      const key2 = this.toKey(p2);
+      const neighbors = this.graph[key1] || [];
+      const edge = neighbors.find(e => e.node === key2);
+      
+      if (edge && roadShadeCache && roadShadeCache.has(edge.road)) {
+        isShaded = roadShadeCache.get(edge.road);
+      } else {
+        const midLng = (p1[0] + p2[0]) / 2;
+        const midLat = (p1[1] + p2[1]) / 2;
+        isShaded = shadowEngine.isCoordinateShaded(midLng, midLat, sunPos, userElements);
+        if (edge && roadShadeCache) {
+          roadShadeCache.set(edge.road, isShaded);
+        }
+      }
       
       if (isShaded) {
         shadedDistance += dist;
@@ -178,25 +195,31 @@ export class Router {
     const endNode = this.findNearestNode(endLngLat[0], endLngLat[1]);
     
     if (!startNode || !endNode || startNode === endNode) return null;
+
+    // Cache to share computed shade states during pathfinding relaxations
+    const roadShadeCache = new Map();
     
     // 1. FASTEST ROUTE WEIGHT: simple physical length
     const fastestPathCoords = this.findPath(startNode, endNode, (edge) => edge.length);
-    const fastestDetails = this.getRouteDetails(fastestPathCoords, shadowEngine, sunPos, userElements);
+    const fastestDetails = this.getRouteDetails(fastestPathCoords, shadowEngine, sunPos, userElements, roadShadeCache);
     
     // 2. COOLEST ROUTE WEIGHT: heavily penalises exposed segments
     const coolestPathCoords = this.findPath(startNode, endNode, (edge) => {
-      // Find midpoint coordinates
-      const p1 = edge.coords[0];
-      const p2 = edge.coords[1];
-      const midLng = (p1[0] + p2[0]) / 2;
-      const midLat = (p1[1] + p2[1]) / 2;
+      let isShaded = roadShadeCache.get(edge.road);
+      if (isShaded === undefined) {
+        // Evaluate midpoint coordinates
+        const coords = edge.road.geometry.coordinates;
+        const midIdx = Math.floor(coords.length / 2);
+        const pMid = coords[midIdx];
+        isShaded = pMid ? shadowEngine.isCoordinateShaded(pMid[0], pMid[1], sunPos, userElements) : false;
+        roadShadeCache.set(edge.road, isShaded);
+      }
       
-      const isShaded = shadowEngine.isCoordinateShaded(midLng, midLat, sunPos, userElements);
       const penalty = isShaded ? 1.0 : 4.0; // 4x penalty for sun exposed paths
       return edge.length * penalty;
     });
     
-    const coolestDetails = this.getRouteDetails(coolestPathCoords, shadowEngine, sunPos, userElements);
+    const coolestDetails = this.getRouteDetails(coolestPathCoords, shadowEngine, sunPos, userElements, roadShadeCache);
     
     return {
       fastest: fastestDetails,
