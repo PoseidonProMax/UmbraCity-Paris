@@ -402,6 +402,48 @@ class App {
         centroid: [2.3469, 48.8543],
         description: "Headquarters of the Paris Police Prefecture, located on the Île de la Cité.",
         color: "#64748b"
+      },
+      {
+        name: "Pont Neuf",
+        fullName: "Pont Neuf",
+        centroid: [2.3411, 48.8570],
+        description: "The oldest standing bridge across the river Seine in Paris, completed in 1607.",
+        color: "#14b8a6"
+      },
+      {
+        name: "Pont de l'Archevêché",
+        fullName: "Pont de l'Archevêché",
+        centroid: [2.3516, 48.8517],
+        description: "Scenic stone arch bridge connecting the Île de la Cité to the Left Bank behind Notre-Dame.",
+        color: "#0ea5e9"
+      },
+      {
+        name: "Collège de France",
+        fullName: "Collège de France",
+        centroid: [2.3444, 48.8498],
+        description: "Prestigious public higher education and research institution, established in 1530.",
+        color: "#f43f5e"
+      },
+      {
+        name: "Église Saint-Séverin",
+        fullName: "Église Saint-Séverin",
+        centroid: [2.3449, 48.8517],
+        description: "Beautiful Late Gothic Roman Catholic church in the Latin Quarter, containing 15th-century stained glass.",
+        color: "#eab308"
+      },
+      {
+        name: "Square René Viviani",
+        fullName: "Square René Viviani",
+        centroid: [2.3473, 48.8521],
+        description: "Public park containing the oldest planted tree in Paris (a black locust tree from 1601).",
+        color: "#84cc16"
+      },
+      {
+        name: "Tribunal de Commerce",
+        fullName: "Tribunal de Commerce de Paris",
+        centroid: [2.3435, 48.8562],
+        description: "Historic commercial court building topped by an elegant octagonal dome.",
+        color: "#a855f7"
       }
     ];
 
@@ -721,6 +763,7 @@ class App {
       date, 
       this.planner ? this.planner.placedElements : []
     );
+    this.latestComfortRoads = updatedRoads;
     
     if (this.map.getSource('comfort-roads')) {
       this.map.getSource('comfort-roads').setData(updatedRoads);
@@ -1033,9 +1076,9 @@ class App {
         {
           type: 'Feature',
           properties: {
-            color: '#ec4899', // hot pink fastest
+            color: '#ffffff', // white fastest
             width: 5,
-            opacity: 0.65
+            opacity: 0.8
           },
           geometry: { type: 'LineString', coordinates: fCoords }
         },
@@ -1080,9 +1123,9 @@ class App {
     features.push({
       type: 'Feature',
       properties: {
-        color: '#ec4899', // hot pink fastest
+        color: '#ffffff', // white fastest
         width: this.activeRouteView === 'fastest' ? 8 : 4.5,
-        opacity: this.activeRouteView === 'fastest' ? 0.95 : 0.35
+        opacity: this.activeRouteView === 'fastest' ? 0.95 : 0.4
       },
       geometry: { type: 'LineString', coordinates: fastestCoords }
     });
@@ -1108,7 +1151,7 @@ class App {
     this.clearSuggestions();
     
     const date = this.getCurrentDate();
-    const suggestions = this.planner.generateSuggestions(this.data.roads, date);
+    const suggestions = this.planner.generateSuggestions(this.latestComfortRoads || this.data.roads, date);
     
     if (suggestions.length === 0) {
       this.planner.showToast("No hot spots found! Placements are already optimal.");
@@ -1120,6 +1163,7 @@ class App {
     suggestions.forEach(cand => {
       const el = document.createElement('div');
       el.className = 'suggestion-marker';
+      el.innerHTML = '💡';
       el.title = `Suggested Tree Placement for ${cand.roadName}`;
       
       const marker = new maplibregl.Marker({ element: el })

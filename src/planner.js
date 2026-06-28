@@ -104,19 +104,33 @@ export class ShadePlanner {
       }
     });
 
-    // Sort candidates by score and grab top 4 unique locations
+    // Sort candidates by score and grab top 6 unique locations, spreading them across different streets
     candidates.sort((a, b) => b.score - a.score);
     
     const uniqueCandidates = [];
-    const seen = new Set();
+    const seenStreets = new Set();
     
     for (const cand of candidates) {
-      const key = `${cand.lngLat[0].toFixed(5)},${cand.lngLat[1].toFixed(5)}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueCandidates.push(cand);
-        if (uniqueCandidates.length >= 4) break;
+      // 1. Enforce unique street name (if not generic path) to avoid clustering
+      if (cand.roadName !== "Pedestrian Path" && seenStreets.has(cand.roadName)) {
+        continue;
       }
+      
+      // 2. Enforce minimum distance separation of 120 meters
+      let tooClose = false;
+      for (const selected of uniqueCandidates) {
+        const dist = turf.distance(turf.point(cand.lngLat), turf.point(selected.lngLat), { units: 'meters' });
+        if (dist < 120) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (tooClose) continue;
+      
+      seenStreets.add(cand.roadName);
+      uniqueCandidates.push(cand);
+      
+      if (uniqueCandidates.length >= 6) break;
     }
     
     this.suggestions = uniqueCandidates;

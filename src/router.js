@@ -215,7 +215,7 @@ export class Router {
         roadShadeCache.set(edge.road, isShaded);
       }
       
-      const penalty = isShaded ? 1.0 : 4.0; // 4x penalty for sun exposed paths
+      const penalty = isShaded ? 1.0 : 7.0; // 7x penalty to encourage slightly wider detours
       return edge.length * penalty;
     });
     

@@ -84,40 +84,49 @@ export class ThreeLayer {
     
     this.scene.add(this.sunLight);
     
-    // Visible Glowing Sun Sphere in the sky
-    const sunGroup = new THREE.Group();
-    const sunSphereGeo = new THREE.SphereGeometry(6 * this.scale, 32, 32);
-    const sunSphereMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb });
-    const sunCore = new THREE.Mesh(sunSphereGeo, sunSphereMat);
-    sunGroup.add(sunCore);
-
-    const sunGlowGeo = new THREE.SphereGeometry(16 * this.scale, 32, 32);
-    const sunGlowMat = new THREE.MeshBasicMaterial({
-      color: 0xf59e0b,
-      transparent: true,
-      opacity: 0.25
+    // Visible Glowing Sun Sprite in the sky (dynamic glow corona)
+    const sunCanvas = document.createElement('canvas');
+    sunCanvas.width = 128;
+    sunCanvas.height = 128;
+    const sctx = sunCanvas.getContext('2d');
+    const sgrad = sctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    sgrad.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');
+    sgrad.addColorStop(0.12, 'rgba(254, 240, 138, 0.95)'); // Yellow glow
+    sgrad.addColorStop(0.35, 'rgba(249, 115, 22, 0.38)');  // Orange flare
+    sgrad.addColorStop(0.68, 'rgba(239, 68, 68, 0.08)');   // Red scattered glow
+    sgrad.addColorStop(1.0, 'rgba(239, 68, 68, 0.0)');
+    sctx.fillStyle = sgrad;
+    sctx.fillRect(0, 0, 128, 128);
+    const sunTex = new THREE.CanvasTexture(sunCanvas);
+    const sunMat = new THREE.SpriteMaterial({
+      map: sunTex,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
     });
-    const sunGlow = new THREE.Mesh(sunGlowGeo, sunGlowMat);
-    sunGroup.add(sunGlow);
-    this.sunSphere = sunGroup;
+    this.sunSphere = new THREE.Sprite(sunMat);
+    this.sunSphere.scale.set(130 * this.scale, 130 * this.scale, 1);
     this.scene.add(this.sunSphere);
 
-    // Visible Glowing Moon Sphere in the sky
-    const moonGroup = new THREE.Group();
-    const moonSphereGeo = new THREE.SphereGeometry(4 * this.scale, 32, 32);
-    const moonSphereMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
-    const moonCore = new THREE.Mesh(moonSphereGeo, moonSphereMat);
-    moonGroup.add(moonCore);
-
-    const moonGlowGeo = new THREE.SphereGeometry(10 * this.scale, 32, 32);
-    const moonGlowMat = new THREE.MeshBasicMaterial({
-      color: 0x94a3b8,
-      transparent: true,
-      opacity: 0.12
+    // Visible Glowing Moon Sprite in the sky (sky blue soft night light glow)
+    const moonCanvas = document.createElement('canvas');
+    moonCanvas.width = 128;
+    moonCanvas.height = 128;
+    const mctx = moonCanvas.getContext('2d');
+    const mgrad = mctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    mgrad.addColorStop(0.0, 'rgba(226, 232, 240, 1.0)');
+    mgrad.addColorStop(0.2, 'rgba(186, 230, 253, 0.7)');  // Sky blue core
+    mgrad.addColorStop(0.55, 'rgba(14, 165, 233, 0.16)');  // Outer dark blue glow
+    mgrad.addColorStop(1.0, 'rgba(14, 165, 233, 0.0)');
+    mctx.fillStyle = mgrad;
+    mctx.fillRect(0, 0, 128, 128);
+    const moonTex = new THREE.CanvasTexture(moonCanvas);
+    const moonMat = new THREE.SpriteMaterial({
+      map: moonTex,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
     });
-    const moonGlow = new THREE.Mesh(moonGlowGeo, moonGlowMat);
-    moonGroup.add(moonGlow);
-    this.moonSphere = moonGroup;
+    this.moonSphere = new THREE.Sprite(moonMat);
+    this.moonSphere.scale.set(75 * this.scale, 75 * this.scale, 1);
     this.moonSphere.visible = false;
     this.scene.add(this.moonSphere);
     
@@ -464,18 +473,25 @@ export class ThreeLayer {
     this.sunLight.shadow.camera.far = 3500 * this.scale;
     this.sunLight.shadow.camera.updateProjectionMatrix();
 
-    // Position visible sun sphere high in the sky (within far clipping plane)
+    // Position visible sun sprite high in the sky and scale it dynamically (looks larger near horizon)
     if (this.sunSphere) {
-      const sunDist = 400 * this.scale;
+      const sunDist = 380 * this.scale;
       const sxs = cx + sunDist * Math.cos(alt) * Math.sin(az);
       const sys = cy - sunDist * Math.cos(alt) * Math.cos(az);
       const szs = sunDist * Math.sin(alt);
       this.sunSphere.position.set(sxs, sys, szs);
+      
+      const pulseFactor = 1.0 + (1.0 - Math.sin(alt)) * 0.45;
+      this.sunSphere.scale.set(
+        130 * this.scale * pulseFactor,
+        130 * this.scale * pulseFactor,
+        1
+      );
     }
     
-    // Scale intensity based on solar altitude (overhead noon is brightest)
+    // Scale intensity based on solar altitude (overhead noon is brightest, summer afternoon)
     const altitudeDegrees = (alt * 180) / Math.PI;
-    const intensity = Math.min(1.4, Math.max(0.1, Math.sin(alt) * 1.8));
+    const intensity = Math.min(1.75, Math.max(0.15, Math.sin(alt) * 2.3));
     
     // Dynamic Color Temperature Transition (sunset/sunrise golden hour)
     if (altitudeDegrees < 20) {
