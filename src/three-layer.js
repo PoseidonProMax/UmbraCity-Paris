@@ -248,22 +248,48 @@ export class ThreeLayer {
     this.treeTrunkMesh.castShadow = true;
     this.treeTrunkMesh.receiveShadow = false;
 
-    // Faceted Icosahedron foliage for low-poly high-end architectural style
-    const canopyGeo = new THREE.IcosahedronGeometry(1.5 * this.scale, 1);
-    canopyGeo.scale(1, 1, 0.8); // slightly squashed along vertical axis
-    canopyGeo.translate(0, 0, 5 * this.scale); // sit canopy on top of trunk
+    // Three instanced meshes for multi-tiered canopies (central, left, right)
     const canopyMat = new THREE.MeshStandardMaterial({ 
-      color: 0x2d6a4f, // sophisticated hunter/forest green
-      roughness: 0.8,
+      roughness: 0.7,
       flatShading: true,
       transparent: true,
       opacity: 0.95
     });
-    this.treeCanopyMesh = new THREE.InstancedMesh(canopyGeo, canopyMat, count);
-    this.treeCanopyMesh.castShadow = true;
-    this.treeCanopyMesh.receiveShadow = false;
+
+    // Central sub-canopy
+    const canopyGeoCentral = new THREE.IcosahedronGeometry(1.5 * this.scale, 1);
+    canopyGeoCentral.scale(1, 1, 0.85); // slightly squashed vertically
+    canopyGeoCentral.translate(0, 0, 5 * this.scale);
+    this.treeCanopyMeshCentral = new THREE.InstancedMesh(canopyGeoCentral, canopyMat.clone(), count);
+    this.treeCanopyMeshCentral.castShadow = true;
+    this.treeCanopyMeshCentral.receiveShadow = false;
+
+    // Left sub-canopy (slightly offset and smaller)
+    const canopyGeoLeft = new THREE.IcosahedronGeometry(1.1 * this.scale, 1);
+    canopyGeoLeft.scale(1, 1, 0.8);
+    canopyGeoLeft.translate(-0.6 * this.scale, -0.4 * this.scale, 4.4 * this.scale);
+    this.treeCanopyMeshLeft = new THREE.InstancedMesh(canopyGeoLeft, canopyMat.clone(), count);
+    this.treeCanopyMeshLeft.castShadow = true;
+    this.treeCanopyMeshLeft.receiveShadow = false;
+
+    // Right sub-canopy (slightly offset, another direction, smaller)
+    const canopyGeoRight = new THREE.IcosahedronGeometry(1.2 * this.scale, 1);
+    canopyGeoRight.scale(1, 1, 0.8);
+    canopyGeoRight.translate(0.6 * this.scale, 0.5 * this.scale, 4.6 * this.scale);
+    this.treeCanopyMeshRight = new THREE.InstancedMesh(canopyGeoRight, canopyMat.clone(), count);
+    this.treeCanopyMeshRight.castShadow = true;
+    this.treeCanopyMeshRight.receiveShadow = false;
 
     const dummy = new THREE.Object3D();
+
+    const greens = [
+      new THREE.Color(0x15803d), // rich forest green
+      new THREE.Color(0x166534), // deep pine green
+      new THREE.Color(0x1b4332), // dark emerald
+      new THREE.Color(0x2d6a4f), // classic hunter green
+      new THREE.Color(0x3f6212), // olive/lime-green
+      new THREE.Color(0x4d7c0f)  // soft leaf green
+    ];
 
     features.forEach((tree, idx) => {
       const coords = tree.geometry.coordinates;
@@ -280,20 +306,33 @@ export class ThreeLayer {
       dummy.position.set(pos.x, pos.y, 0);
       dummy.scale.set(canopyScale, canopyScale, trunkHeightScale);
       dummy.updateMatrix();
-      
       this.treeTrunkMesh.setMatrixAt(idx, dummy.matrix);
       
-      // Position canopy (which handles its own trunk translation internally)
+      // Position central canopy
       dummy.scale.set(canopyScale, canopyScale, canopyScale);
       dummy.updateMatrix();
-      this.treeCanopyMesh.setMatrixAt(idx, dummy.matrix);
+      this.treeCanopyMeshCentral.setMatrixAt(idx, dummy.matrix);
+      
+      // Position left and right sub-canopies (use same position matrix)
+      this.treeCanopyMeshLeft.setMatrixAt(idx, dummy.matrix);
+      this.treeCanopyMeshRight.setMatrixAt(idx, dummy.matrix);
+
+      // Color variation
+      const randomColor = greens[Math.floor(Math.random() * greens.length)];
+      this.treeCanopyMeshCentral.setColorAt(idx, randomColor);
+      this.treeCanopyMeshLeft.setColorAt(idx, randomColor);
+      this.treeCanopyMeshRight.setColorAt(idx, randomColor);
     });
 
     this.treeTrunkMesh.instanceMatrix.needsUpdate = true;
-    this.treeCanopyMesh.instanceMatrix.needsUpdate = true;
+    this.treeCanopyMeshCentral.instanceMatrix.needsUpdate = true;
+    this.treeCanopyMeshLeft.instanceMatrix.needsUpdate = true;
+    this.treeCanopyMeshRight.instanceMatrix.needsUpdate = true;
     
     this.scene.add(this.treeTrunkMesh);
-    this.scene.add(this.treeCanopyMesh);
+    this.scene.add(this.treeCanopyMeshCentral);
+    this.scene.add(this.treeCanopyMeshLeft);
+    this.scene.add(this.treeCanopyMeshRight);
   }
 
   loadWater(waterGeoJSON) {
@@ -407,13 +446,23 @@ export class ThreeLayer {
     const alt = sunPos.altitude;
     const az = sunPos.azimuth;
 
-    // Directional light position offset from center
-    const r = 0.15;
+    // Directional light position offset from center (tightly local)
+    const r = 2000 * this.scale; // 2km distance
     const sz = r * Math.sin(alt);
     const sx = r * Math.cos(alt) * Math.sin(az);
     const sy = -r * Math.cos(alt) * Math.cos(az); // North is negative Y
 
     this.sunLight.position.set(cx + sx, cy + sy, sz);
+
+    // Update shadow camera bounds tightly around target center
+    const d = 800 * this.scale; // 1.6km diameter area
+    this.sunLight.shadow.camera.left = -d;
+    this.sunLight.shadow.camera.right = d;
+    this.sunLight.shadow.camera.top = d;
+    this.sunLight.shadow.camera.bottom = -d;
+    this.sunLight.shadow.camera.near = 500 * this.scale;
+    this.sunLight.shadow.camera.far = 3500 * this.scale;
+    this.sunLight.shadow.camera.updateProjectionMatrix();
 
     // Position visible sun sphere high in the sky (within far clipping plane)
     if (this.sunSphere) {
@@ -477,24 +526,42 @@ export class ThreeLayer {
       const trunkGeo = new THREE.CylinderGeometry(0.18 * this.scale, 0.28 * this.scale, hScale, 6);
       trunkGeo.rotateX(Math.PI / 2);
       trunkGeo.translate(0, 0, hScale / 2);
-      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x451a03 });
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.95 });
       const trunk = new THREE.Mesh(trunkGeo, trunkMat);
       trunk.castShadow = true;
       group.add(trunk);
 
-      const canopyGeo = new THREE.IcosahedronGeometry(rScale, 1);
-      canopyGeo.scale(1, 1, 0.8);
-      canopyGeo.translate(0, 0, hScale);
       const canopyMat = new THREE.MeshStandardMaterial({ 
         color: 0x10b981, // Vibrant emerald green for user-placed tree
-        roughness: 0.8,
+        roughness: 0.7,
         flatShading: true,
         emissive: 0x064e3b,
-        emissiveIntensity: 0.1
+        emissiveIntensity: 0.05
       });
-      const canopy = new THREE.Mesh(canopyGeo, canopyMat);
-      canopy.castShadow = true;
-      group.add(canopy);
+      
+      // Central sub-canopy
+      const canopyGeoCentral = new THREE.IcosahedronGeometry(rScale, 1);
+      canopyGeoCentral.scale(1, 1, 0.85);
+      canopyGeoCentral.translate(0, 0, hScale);
+      const canopyCentral = new THREE.Mesh(canopyGeoCentral, canopyMat);
+      canopyCentral.castShadow = true;
+      group.add(canopyCentral);
+
+      // Left sub-canopy (slightly offset and smaller)
+      const canopyGeoLeft = new THREE.IcosahedronGeometry(rScale * 0.73, 1);
+      canopyGeoLeft.scale(1, 1, 0.8);
+      canopyGeoLeft.translate(-0.4 * rScale, -0.27 * rScale, hScale * 0.88);
+      const canopyLeft = new THREE.Mesh(canopyGeoLeft, canopyMat);
+      canopyLeft.castShadow = true;
+      group.add(canopyLeft);
+
+      // Right sub-canopy (slightly offset, another direction, smaller)
+      const canopyGeoRight = new THREE.IcosahedronGeometry(rScale * 0.8, 1);
+      canopyGeoRight.scale(1, 1, 0.8);
+      canopyGeoRight.translate(0.4 * rScale, 0.33 * rScale, hScale * 0.92);
+      const canopyRight = new THREE.Mesh(canopyGeoRight, canopyMat);
+      canopyRight.castShadow = true;
+      group.add(canopyRight);
       
     } else if (type === 'canopy') {
       const hScale = height * this.scale;
@@ -502,6 +569,7 @@ export class ThreeLayer {
       
       const rw = 6 * this.scale;
       const rh = 4 * this.scale;
+      
       // Beautiful curved arch using a cylinder segment
       const roofGeo = new THREE.CylinderGeometry(rw / 2, rw / 2, rh, 24, 1, true, 0, Math.PI);
       roofGeo.rotateX(Math.PI / 2); // align along Y
@@ -524,6 +592,21 @@ export class ThreeLayer {
       roof.receiveShadow = true;
       shelterGroup.add(roof);
       
+      // Mahogany wood framing accents on the sides of the pergola
+      const beamGeo = new THREE.BoxGeometry(0.25 * this.scale, 4.0 * this.scale, 0.25 * this.scale);
+      const beamMat = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.6 }); // Mahogany
+      
+      const beamL = new THREE.Mesh(beamGeo, beamMat);
+      beamL.position.set(-2.85 * this.scale, 0, hScale);
+      beamL.castShadow = true;
+      shelterGroup.add(beamL);
+      
+      const beamR = new THREE.Mesh(beamGeo, beamMat);
+      beamR.position.set(2.85 * this.scale, 0, hScale);
+      beamR.castShadow = true;
+      shelterGroup.add(beamR);
+      
+      // Slender polished steel/chrome pillars
       const pillarGeo = new THREE.CylinderGeometry(0.06 * this.scale, 0.06 * this.scale, hScale, 12);
       pillarGeo.rotateX(Math.PI / 2);
       pillarGeo.translate(0, 0, hScale / 2);
@@ -544,6 +627,26 @@ export class ThreeLayer {
         pillar.position.set(ox, oy, 0);
         pillar.castShadow = true;
         shelterGroup.add(pillar);
+      });
+
+      // Cozy glowing warm LED downlight globes embedded underneath the shelter
+      const ledGeo = new THREE.SphereGeometry(0.18 * this.scale, 8, 8);
+      const ledMat = new THREE.MeshStandardMaterial({
+        color: 0xffb703,
+        emissive: 0xffb703,
+        emissiveIntensity: 2.5
+      });
+      
+      const ledOffsets = [
+        [-1.5 * this.scale, 0, hScale - 0.15 * this.scale],
+        [1.5 * this.scale, 0, hScale - 0.15 * this.scale],
+        [0, 0, hScale - 0.05 * this.scale]
+      ];
+      
+      ledOffsets.forEach(([lx, ly, lz]) => {
+        const led = new THREE.Mesh(ledGeo, ledMat);
+        led.position.set(lx, ly, lz);
+        shelterGroup.add(led);
       });
       
       group.add(shelterGroup);

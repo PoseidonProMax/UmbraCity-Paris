@@ -19,6 +19,7 @@ export class UI {
     this.createInfoPanel();
     this.createRoutePanel();
     this.createWeatherCard();
+    this.createAudioToggle();
   }
 
   formatTime(totalMinutes) {
@@ -64,21 +65,41 @@ export class UI {
     `;
     this.container.appendChild(splash);
     
-    // Smooth transition: show synced after 1.5 seconds, then fade out at 2.2 seconds
+    // Smooth transition: show synced after 1.5 seconds, then display Enter button
     setTimeout(() => {
       const lbl = splash.querySelector('#sync-status-lbl');
       if (lbl) {
         lbl.innerHTML = `🟢 Live conditions synced successfully`;
         lbl.style.color = 'var(--comfort-green)';
       }
-    }, 1500);
-
-    setTimeout(() => {
-      splash.style.opacity = '0';
-      setTimeout(() => {
-        splash.remove();
-      }, 500);
-    }, 2200);
+      
+      // Add glowing enter button to satisfy browser AudioContext interaction policy
+      const enterBtn = document.createElement('button');
+      enterBtn.className = 'btn';
+      enterBtn.style.marginTop = '22px';
+      enterBtn.style.width = '100%';
+      enterBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+      enterBtn.style.color = '#fff';
+      enterBtn.style.borderColor = 'rgba(255,255,255,0.15)';
+      enterBtn.style.fontWeight = '700';
+      enterBtn.style.fontSize = '0.95rem';
+      enterBtn.style.padding = '12px';
+      enterBtn.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.3)';
+      enterBtn.textContent = 'Enter UmbraCity';
+      
+      splash.querySelector('.splash-content').appendChild(enterBtn);
+      
+      enterBtn.addEventListener('click', () => {
+        if (this.callbacks.onSplashDismiss) {
+          this.callbacks.onSplashDismiss();
+        }
+        
+        splash.style.opacity = '0';
+        setTimeout(() => {
+          splash.remove();
+        }, 500);
+      });
+    }, 1200);
   }
 
   // Toolbar on Left side (shifted down to fit brand panel)
@@ -163,21 +184,33 @@ export class UI {
     legend.innerHTML = `
       <div class="legend-title">Comfort Scale</div>
       <div class="legend-items">
-        <div class="legend-item">
-          <div class="legend-color" style="background: var(--comfort-green); box-shadow: 0 0 6px var(--comfort-green);"></div>
-          <span>Comfortable</span>
+        <div class="legend-item" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="legend-color" style="background: var(--comfort-green); box-shadow: 0 0 6px var(--comfort-green);"></div>
+            <span>Comfortable</span>
+          </div>
+          <span style="color: #94a3b8; font-size: 0.68rem; font-family: monospace;">18°C - 24°C</span>
         </div>
-        <div class="legend-item">
-          <div class="legend-color" style="background: var(--comfort-yellow); box-shadow: 0 0 6px var(--comfort-yellow);"></div>
-          <span>Warm</span>
+        <div class="legend-item" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="legend-color" style="background: var(--comfort-yellow); box-shadow: 0 0 6px var(--comfort-yellow);"></div>
+            <span>Warm</span>
+          </div>
+          <span style="color: #94a3b8; font-size: 0.68rem; font-family: monospace;">25°C - 30°C</span>
         </div>
-        <div class="legend-item">
-          <div class="legend-color" style="background: var(--comfort-orange); box-shadow: 0 0 6px var(--comfort-orange);"></div>
-          <span>Hot</span>
+        <div class="legend-item" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="legend-color" style="background: var(--comfort-orange); box-shadow: 0 0 6px var(--comfort-orange);"></div>
+            <span>Hot</span>
+          </div>
+          <span style="color: #94a3b8; font-size: 0.68rem; font-family: monospace;">31°C - 36°C</span>
         </div>
-        <div class="legend-item">
-          <div class="legend-color" style="background: var(--comfort-red); box-shadow: 0 0 6px var(--comfort-red);"></div>
-          <span>Dangerous</span>
+        <div class="legend-item" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="legend-color" style="background: var(--comfort-red); box-shadow: 0 0 6px var(--comfort-red);"></div>
+            <span>Dangerous</span>
+          </div>
+          <span style="color: #94a3b8; font-size: 0.68rem; font-family: monospace;">37°C - 42°C</span>
         </div>
       </div>
       <label class="switch-label">
@@ -242,9 +275,7 @@ export class UI {
       this.callbacks.onModeChange('manual');
     });
 
-    let throttleTimeout = null;
-    let lastTime = 0;
-    const throttleLimit = 80;
+    let dragTimeout = null;
 
     slider.addEventListener('input', () => {
       // Auto-toggle to manual if user interacts with the slider
@@ -256,17 +287,20 @@ export class UI {
       const minutes = parseInt(slider.value);
       display.textContent = this.formatTime(minutes);
       
-      const now = Date.now();
-      if (now - lastTime >= throttleLimit) {
-        this.callbacks.onTimeChange(minutes);
-        lastTime = now;
-      } else {
-        if (throttleTimeout) clearTimeout(throttleTimeout);
-        throttleTimeout = setTimeout(() => {
-          this.callbacks.onTimeChange(minutes);
-          lastTime = Date.now();
-        }, throttleLimit);
-      }
+      // 1. Update 3D shadows instantly (butter-smooth GPU update)
+      this.callbacks.onTimeChange(minutes, true);
+      
+      // 2. Debounce the heavy CPU-bound 2D street/route updates
+      if (dragTimeout) clearTimeout(dragTimeout);
+      dragTimeout = setTimeout(() => {
+        this.callbacks.onTimeChange(minutes, false);
+      }, 150);
+    });
+
+    slider.addEventListener('change', () => {
+      const minutes = parseInt(slider.value);
+      if (dragTimeout) clearTimeout(dragTimeout);
+      this.callbacks.onTimeChange(minutes, false);
     });
     
     playBtn.addEventListener('click', () => {
@@ -348,26 +382,36 @@ export class UI {
   showAnalysis(data) {
     this.routePanel.classList.add('hidden');
     
+    // Check if we are showing a famous landmark
+    const isLandmark = !!data.landmarkName;
+    const title = data.landmarkName || data.nearestStreet || "Selected Location";
+    const subtitle = isLandmark ? "Historic Paris Landmark" : "Paris Latin Quarter";
+    const descHtml = isLandmark && data.landmarkDescription
+      ? `<div class="landmark-desc" style="font-size: 0.76rem; color: #cbd5e1; line-height: 1.4; margin-top: 6px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06);">${data.landmarkDescription}</div>`
+      : "";
+      
     this.infoPanel.innerHTML = `
       <div class="panel-header">
         <div>
-          <h2 class="panel-title">${data.nearestStreet || "Selected Location"}</h2>
-          <p class="panel-subtitle">Paris Latin Quarter</p>
+          <h2 class="panel-title">${title}</h2>
+          <p class="panel-subtitle">${subtitle}</p>
         </div>
         <button class="close-btn" id="close-info-btn">✕</button>
       </div>
       
-      <div class="metric-section">
+      ${descHtml}
+      
+      <div class="metric-section" style="margin-top: 12px;">
         <div class="metric-row">
           <span class="metric-label">Thermal Comfort</span>
-          <span class="badge ${data.comfortLevel.toLowerCase()}">${data.comfortLevel}</span>
+          <span class="badge ${data.comfortLevel.toLowerCase()}">${data.comfortLevel} <span style="font-size: 0.68rem; opacity: 0.85; margin-left: 2px;">(${data.tempRange})</span></span>
         </div>
       </div>
       
       <div class="metric-section">
         <div class="metric-row">
           <span class="metric-label">Sun Exposure</span>
-          <span class="metric-val" style="color: ${data.shaded ? 'var(--comfort-green)' : 'var(--color-warm)'};">
+          <span class="metric-val" style="color: ${data.shaded ? 'var(--comfort-green)' : 'var(--color-warm)'}; font-weight: 600;">
             ${data.shaded ? 'Fully Shaded 🌳' : 'Direct Sunlight ☀️'}
           </span>
         </div>
@@ -386,11 +430,36 @@ export class UI {
       <div class="recommendation-box" style="border-left-color: ${data.shaded ? 'var(--comfort-green)' : 'var(--comfort-red)'}">
         ${data.recommendation}
       </div>
+
+      <div class="routing-actions-row" style="display: flex; gap: 8px; margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px;">
+        <button class="btn" id="analysis-start-route-btn" style="flex: 1; padding: 8px 10px; font-size: 0.72rem; font-weight: 600; background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.25); color: #4ade80; display: flex; align-items: center; justify-content: center; gap: 4px;">
+          📍 Start Here
+        </button>
+        <button class="btn" id="analysis-end-route-btn" style="flex: 1; padding: 8px 10px; font-size: 0.72rem; font-weight: 600; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.25); color: #f87171; display: flex; align-items: center; justify-content: center; gap: 4px;">
+          🏁 End Here
+        </button>
+      </div>
     `;
     
     this.infoPanel.classList.remove('hidden');
+    
     this.infoPanel.querySelector('#close-info-btn').addEventListener('click', () => {
       this.infoPanel.classList.add('hidden');
+    });
+
+    const btnStart = this.infoPanel.querySelector('#analysis-start-route-btn');
+    const btnEnd = this.infoPanel.querySelector('#analysis-end-route-btn');
+
+    btnStart.addEventListener('click', () => {
+      if (this.callbacks.onSetRouteEndpoint) {
+        this.callbacks.onSetRouteEndpoint('start', [data.lng, data.lat]);
+      }
+    });
+
+    btnEnd.addEventListener('click', () => {
+      if (this.callbacks.onSetRouteEndpoint) {
+        this.callbacks.onSetRouteEndpoint('end', [data.lng, data.lat]);
+      }
     });
   }
 
@@ -637,5 +706,47 @@ export class UI {
     const tools = document.querySelectorAll('[data-tool]');
     tools.forEach(t => t.classList.remove('active'));
     this.callbacks.onToolChange('none');
+  }
+
+  createAudioToggle() {
+    const toggle = document.createElement('button');
+    toggle.className = 'audio-toggle-btn glass-panel';
+    toggle.id = 'audio-toggle';
+    toggle.title = 'Toggle Ambient Sound';
+    toggle.innerHTML = `
+      <svg class="speaker-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="1" y1="1" x2="23" y2="23" class="mute-line" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line>
+        <path d="M9 18V5l12-2v13"></path>
+        <circle cx="6" cy="18" r="3"></circle>
+        <circle cx="18" cy="16" r="3"></circle>
+      </svg>
+    `;
+    this.container.appendChild(toggle);
+    
+    toggle.addEventListener('click', () => {
+      if (this.callbacks.onToggleMute) {
+        const isMuted = this.callbacks.onToggleMute();
+        const muteLine = toggle.querySelector('.mute-line');
+        if (isMuted) {
+          toggle.classList.remove('playing');
+          if (!muteLine) {
+            // Append mute line svg
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", "1");
+            line.setAttribute("y1", "1");
+            line.setAttribute("x2", "23");
+            line.setAttribute("y2", "23");
+            line.setAttribute("class", "mute-line");
+            line.setAttribute("stroke", "currentColor");
+            line.setAttribute("stroke-width", "2.5");
+            line.setAttribute("stroke-linecap", "round");
+            toggle.querySelector('svg').appendChild(line);
+          }
+        } else {
+          toggle.classList.add('playing');
+          if (muteLine) muteLine.remove();
+        }
+      }
+    });
   }
 }

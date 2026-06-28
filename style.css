@@ -989,3 +989,44 @@ input[type="range"].sun-slider::-webkit-slider-thumb:hover {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* 6. Audio Toggle Button & Pulse Animations */
+.audio-toggle-btn {
+  position: absolute;
+  top: 24px;
+  right: 400px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  pointer-events: auto;
+  transition: all 0.25s ease;
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.audio-toggle-btn:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.audio-toggle-btn.playing {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.35);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.25);
+  animation: pulseAudio 2s infinite ease-in-out;
+}
+
+.audio-toggle-btn .mute-line {
+  transition: all 0.2s ease;
+}
+
+@keyframes pulseAudio {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}

@@ -5,6 +5,7 @@ import { ShadowEngine } from './shadow-engine.js';
 import { UI } from './ui.js';
 import { ShadePlanner } from './planner.js';
 import { Router } from './router.js';
+import { AudioEngine } from './audio-engine.js';
 
 // Configuration Constants
 const PARIS_CENTER = [2.349, 48.853]; // Île de la Cité
@@ -18,6 +19,7 @@ class App {
     this.ui = null;
     this.planner = null;
     this.router = null;
+    this.audioEngine = new AudioEngine();
     
     // Application state
     this.currentMinutes = 720; // 12:00 PM solar noon
@@ -306,6 +308,7 @@ class App {
       
       // 7. Setup UI and callbacks
       this.setupUI();
+      this.setupFamousLandmarks();
       
       // Sync clock and weather
       this.setMode('live');
@@ -319,14 +322,119 @@ class App {
       // Initial scene rendering calculation
       this.updateScene();
       
-      // Trigger cinematic intro!
-      this.startCinematicIntro();
-      
       // Setup Click listener
       this.map.on('click', (e) => this.handleMapClick(e));
       
       // Setup mousemove snap listener
       this.map.on('mousemove', (e) => this.handleMapMouseMove(e));
+    });
+  }
+
+  setupFamousLandmarks() {
+    const landmarks = [
+      {
+        name: "Cathédrale Notre-Dame",
+        fullName: "Cathédrale Notre-Dame de Paris",
+        centroid: [2.3499, 48.8529],
+        description: "Gothic medieval cathedral, located on the Île de la Cité. Famously featured in Victor Hugo's novel.",
+        color: "#10b981"
+      },
+      {
+        name: "Sainte-Chapelle",
+        fullName: "Sainte-Chapelle",
+        centroid: [2.3450, 48.8554],
+        description: "A royal medieval gothic chapel within the Palais de la Cité, known for its breathtaking stained glass.",
+        color: "#8b5cf6"
+      },
+      {
+        name: "Palais de Justice",
+        fullName: "Palais de Justice de Paris",
+        centroid: [2.3445, 48.8557],
+        description: "Historic judicial complex and royal palace housing the Court of Appeal of Paris.",
+        color: "#f59e0b"
+      },
+      {
+        name: "Hôtel de Cluny",
+        fullName: "Hôtel de Cluny",
+        centroid: [2.3438, 48.8506],
+        description: "15th-century townhouse, now the National Museum of the Middle Ages, housing the Lady and the Unicorn tapestries.",
+        color: "#ec4899"
+      },
+      {
+        name: "Sorbonne Université",
+        fullName: "Sorbonne Université - Campus Cordeliers",
+        centroid: [2.3406, 48.8507],
+        description: "Historic university campus in the heart of the Latin Quarter, founded in 1257.",
+        color: "#3b82f6"
+      },
+      {
+        name: "Hôtel de Ville",
+        fullName: "Hôtel de Ville",
+        centroid: [2.3524, 48.8563],
+        description: "The city hall of Paris since 1357, featuring a grand neo-Renaissance facade on the Seine.",
+        color: "#06b6d4"
+      },
+      {
+        name: "Préfecture de Police",
+        fullName: "Préfecture de police",
+        centroid: [2.3469, 48.8543],
+        description: "Headquarters of the Paris Police Prefecture, located on the Île de la Cité.",
+        color: "#64748b"
+      }
+    ];
+
+    landmarks.forEach(lm => {
+      const el = document.createElement('div');
+      el.className = 'landmark-marker-label';
+      el.innerHTML = `
+        <div class="landmark-dot" style="background: ${lm.color};"></div>
+        <div class="landmark-name">${lm.name}</div>
+      `;
+      
+      const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat(lm.centroid)
+        .addTo(this.map);
+        
+      el.addEventListener('click', (e) => {
+        e.stopPropagation(); // prevent map click triggers
+        
+        // Fly camera to landmark
+        this.map.flyTo({
+          center: lm.centroid,
+          zoom: 17.5,
+          pitch: 50,
+          bearing: -30,
+          speed: 0.8
+        });
+        
+        // Select & highlight landmark in 3D
+        let landmarkFeature = null;
+        for (const b of this.data.buildings.features) {
+          if (b.properties.name && b.properties.name.toLowerCase().includes(lm.name.toLowerCase())) {
+            landmarkFeature = b;
+            break;
+          }
+        }
+        if (landmarkFeature) {
+          this.threeLayer.highlightBuilding(landmarkFeature);
+        }
+        
+        // Open detail card in right panel
+        const date = this.getCurrentDate();
+        const data = this.shadowEngine.analyzePoint(
+          lm.centroid[0],
+          lm.centroid[1],
+          date,
+          this.planner ? this.planner.placedElements : []
+        );
+        
+        // Inject famous landmark properties for rendering
+        data.nearestStreet = lm.fullName;
+        data.landmarkName = lm.fullName;
+        data.landmarkDescription = lm.description;
+        
+        this.ui.showAnalysis(data);
+      });
     });
   }
 
@@ -498,9 +606,9 @@ class App {
 
   setupUI() {
     this.ui = new UI('ui-container', {
-      onTimeChange: (minutes) => {
+      onTimeChange: (minutes, isDragging) => {
         this.currentMinutes = minutes;
-        this.updateScene();
+        this.updateScene(isDragging);
       },
       onToolChange: (tool) => {
         this.activeTool = tool;
@@ -539,19 +647,43 @@ class App {
       },
       onStartSelection: (type) => {
         this.startRoutePointSelection(type);
+      },
+      onSplashDismiss: () => {
+        // Initialize & play background audio engine procedural synthesizer
+        this.audioEngine.init();
+        this.audioEngine.toggleMute(); // starts synth and removes mute overlay
+        
+        // Update sound wave speaker button visual state
+        const speaker = document.getElementById('audio-toggle');
+        if (speaker) {
+          speaker.classList.add('playing');
+          const line = speaker.querySelector('.mute-line');
+          if (line) line.remove();
+        }
+
+        // Trigger cinematic eased zoom-in camera intro
+        this.startCinematicIntro();
+      },
+      onToggleMute: () => {
+        return this.audioEngine.toggleMute();
+      },
+      onSetRouteEndpoint: (type, lngLat) => {
+        this.setRouteEndpointDirectly(type, lngLat);
       }
     });
   }
 
   // Update logic: recalculates sun, shadows, and updates rendering layers
-  updateScene() {
+  updateScene(only3D = false) {
     const date = this.getCurrentDate();
     const sunPos = this.shadowEngine.getSunPosition(date);
     
-    // 1. Update 3D Three.js lighting
+    // 1. Update 3D Three.js lighting (GPU accelerated, butter-smooth 60fps)
     if (this.threeLayer) {
       this.threeLayer.updateSunLight(sunPos);
     }
+    
+    if (only3D) return; // Skip heavy CPU computations during active drag
     
     // 2. Re-compute comfort values for roads
     const updatedRoads = this.shadowEngine.calculateRoadComfort(
@@ -603,6 +735,72 @@ class App {
     this.cursorMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
       .setLngLat(this.map.getCenter())
       .addTo(this.map);
+  }
+
+  setRouteEndpointDirectly(type, lngLat) {
+    const nearestKey = this.router.findNearestNode(lngLat[0], lngLat[1]);
+    if (!nearestKey) {
+      this.planner.showToast("Could not find nearest pedestrian walkway.");
+      return;
+    }
+    const nearestNodeCoords = this.router.fromKey(nearestKey);
+    const distance = turf.distance(turf.point(lngLat), turf.point(nearestNodeCoords), { units: 'meters' });
+    
+    if (distance > 100) {
+      this.planner.showToast("Clicked location is too far from pedestrian walkways.");
+      return;
+    }
+    
+    const isStart = type === 'start';
+    
+    if (isStart) {
+      this.routeStartLngLat = nearestNodeCoords;
+      if (this.startMarker) this.startMarker.remove();
+      
+      const el = document.createElement('div');
+      el.className = 'route-pin-container start dropping';
+      el.innerHTML = `
+        <div class="pin-shadow"></div>
+        <div class="pin-icon">
+          <svg width="24" height="32" viewBox="0 0 24 32" fill="none">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 9.27 12 20 12 20s12-10.73 12-20c0-6.63-5.37-12-12-12zm0 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" fill="#22c55e"/>
+          </svg>
+        </div>
+      `;
+      this.startMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat(this.routeStartLngLat)
+        .addTo(this.map);
+        
+      this.ui.updateRouteSetup('start', this.routeStartLngLat);
+      this.planner.showToast("Start point set! Choose destination.");
+      
+      // Auto trigger destination selection for smoother flow
+      setTimeout(() => {
+        this.startRoutePointSelection('end');
+      }, 600);
+    } else {
+      this.routeEndLngLat = nearestNodeCoords;
+      if (this.endMarker) this.endMarker.remove();
+      
+      const el = document.createElement('div');
+      el.className = 'route-pin-container end dropping';
+      el.innerHTML = `
+        <div class="pin-shadow"></div>
+        <div class="pin-icon">
+          <svg width="24" height="32" viewBox="0 0 24 32" fill="none">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 9.27 12 20 12 20s12-10.73 12-20c0-6.63-5.37-12-12-12zm0 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" fill="#ef4444"/>
+          </svg>
+        </div>
+      `;
+      this.endMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat(this.routeEndLngLat)
+        .addTo(this.map);
+        
+      this.ui.updateRouteSetup('end', this.routeEndLngLat);
+      this.planner.showToast("Destination set! Drawing routes...");
+      
+      this.calculateRoutes(false);
+    }
   }
 
   handleMapMouseMove(e) {
@@ -714,8 +912,6 @@ class App {
       this.planner ? this.planner.placedElements : []
     );
     
-    this.ui.showAnalysis(data);
-    
     // Highlight clicked building in 3D
     let buildingFeature = null;
     const pt = turf.point(lngLat);
@@ -726,6 +922,34 @@ class App {
       }
     }
     
+    let landmarkMatched = null;
+    if (buildingFeature && buildingFeature.properties.name) {
+      const bName = buildingFeature.properties.name.toLowerCase();
+      // See if it matches any famous landmark
+      const landmarks = [
+        { name: "notre-dame", fullName: "Cathédrale Notre-Dame de Paris", desc: "Famous gothic medieval cathedral, located on the Île de la Cité." },
+        { name: "sainte-chapelle", fullName: "Sainte-Chapelle", desc: "A royal medieval gothic chapel within the Palais de la Cité, known for its breathtaking stained glass." },
+        { name: "palais de justice", fullName: "Palais de Justice de Paris", desc: "Historic judicial complex housing the Court of Appeal of Paris." },
+        { name: "cluny", fullName: "Hôtel de Cluny", desc: "15th-century townhouse, now the National Museum of the Middle Ages." },
+        { name: "sorbonne", fullName: "Sorbonne Université", desc: "Historic university campus in the heart of the Latin Quarter, founded in 1257." },
+        { name: "ville", fullName: "Hôtel de Ville", desc: "The city hall of Paris since 1357, featuring a grand neo-Renaissance facade on the Seine." },
+        { name: "police", fullName: "Préfecture de Police", desc: "Headquarters of the Paris Police Prefecture, located on the Île de la Cité." }
+      ];
+      for (const lm of landmarks) {
+        if (bName.includes(lm.name)) {
+          landmarkMatched = lm;
+          break;
+        }
+      }
+    }
+
+    if (landmarkMatched) {
+      data.nearestStreet = landmarkMatched.fullName;
+      data.landmarkName = landmarkMatched.fullName;
+      data.landmarkDescription = landmarkMatched.desc;
+    }
+
+    this.ui.showAnalysis(data);
     this.threeLayer.highlightBuilding(buildingFeature);
   }
 

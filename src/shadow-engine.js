@@ -253,6 +253,7 @@ export class ShadowEngine {
     }
 
     const comfortLevels = ['Dangerous', 'Hot', 'Warm', 'Comfortable'];
+    const tempRanges = ['37°C - 42°C', '31°C - 36°C', '25°C - 30°C', '18°C - 24°C'];
     const recommendations = [
       "⚠️ Critical sun exposure! Seek shade immediately under building awnings.",
       "🔥 High heat exposure. Walk on the shaded side of the street.",
@@ -261,9 +262,12 @@ export class ShadowEngine {
     ];
 
     return {
+      lng: lng,
+      lat: lat,
       shaded: isShaded,
       inPark: inPark,
       comfortLevel: comfortLevels[comfortScore],
+      tempRange: tempRanges[comfortScore],
       comfortScore: comfortScore,
       recommendation: recommendations[comfortScore],
       sunAltitude: (sunPos.altitude * 180) / Math.PI,
