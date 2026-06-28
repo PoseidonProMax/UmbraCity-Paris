@@ -205,7 +205,7 @@ export class UI {
     const legend = document.createElement('div');
     legend.className = 'legend-panel glass-panel';
     legend.innerHTML = `
-      <div class="legend-title">Comfort Scale</div>
+      <div class="legend-title">Temperature Scale</div>
       <div class="legend-items">
         <div class="legend-item" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 6px;">
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -239,7 +239,7 @@ export class UI {
       <label class="switch-label">
         <input type="checkbox" id="heatmap-toggle" checked>
         <span class="switch-toggle"></span>
-        <span>Comfort Overlay</span>
+        <span>Temperature Overlay</span>
       </label>
     `;
     
@@ -268,7 +268,7 @@ export class UI {
         <div class="time-display" id="time-display-lbl">12:00 PM</div>
       </div>
       <div class="slider-controls">
-        <button class="play-btn" id="play-pause-btn" disabled style="opacity: 0.3; cursor: not-allowed;">▶</button>
+        <button class="play-btn" id="play-pause-btn" style="opacity: 0.65; cursor: pointer;">▶</button>
         <div class="slider-wrapper">
           <input type="range" class="sun-slider" id="timeline-slider" min="360" max="1260" value="720" disabled>
         </div>
@@ -327,6 +327,10 @@ export class UI {
     });
     
     playBtn.addEventListener('click', () => {
+      if (this.currentMode === 'live') {
+        this.showToast("Please shift to Manual Timeline to control the time slider!");
+        return;
+      }
       if (this.isPlaying) {
         this.stopPlay(playBtn);
       } else {
@@ -354,9 +358,10 @@ export class UI {
       slider.style.opacity = '0.5';
       slider.style.cursor = 'not-allowed';
       
-      playBtn.setAttribute('disabled', 'true');
-      playBtn.style.opacity = '0.3';
-      playBtn.style.cursor = 'not-allowed';
+      if (playBtn) {
+        playBtn.style.opacity = '0.65';
+        playBtn.style.cursor = 'pointer';
+      }
       this.stopPlay(playBtn);
     } else {
       btnManual.classList.add('active');
@@ -368,9 +373,10 @@ export class UI {
       slider.style.opacity = '1.0';
       slider.style.cursor = 'pointer';
       
-      playBtn.removeAttribute('disabled');
-      playBtn.style.opacity = '1.0';
-      playBtn.style.cursor = 'pointer';
+      if (playBtn) {
+        playBtn.style.opacity = '1.0';
+        playBtn.style.cursor = 'pointer';
+      }
     }
   }
 
@@ -782,5 +788,19 @@ export class UI {
         }
       }
     });
+  }
+
+  showToast(message) {
+    const existing = document.querySelector('.impact-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = 'impact-toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.remove();
+    }, 3500);
   }
 }

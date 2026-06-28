@@ -265,8 +265,8 @@ class App {
       antialias: true
     });
 
-    // Add navigation controls (zoom, rotate)
-    this.map.addControl(new maplibregl.NavigationControl());
+    // Add navigation controls (zoom, rotate) in the bottom-right to prevent overlap with weather panel
+    this.map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
     this.map.on('load', async () => {
       console.log("Base map loaded. Initialising application layers...");
