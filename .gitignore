@@ -1,0 +1,18 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

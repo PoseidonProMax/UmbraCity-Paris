@@ -1,0 +1,19 @@
+{
+  "name": "umbracity",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "preprocess": ".venv\\Scripts\\python scripts/preprocess.py",
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "three": "^0.170.0",
+    "maplibre-gl": "^4.7.0",
+    "suncalc": "^1.9.0",
+    "@turf/turf": "^7.1.0"
+  }
+}
